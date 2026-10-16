@@ -304,4 +304,399 @@
       const statRes = document.getElementById("stat-res");
       const statFps = document.getElementById("stat-fps");
       const statRtt = document.getElementById("stat-rtt");
-      const statBitrate
+      const statBitrate = document.getElementById("stat-bitrate");
+      const statInput = document.getElementById("stat-input");
+      const statGamepad = document.getElementById("stat-gamepad");
+
+      let pc = null;
+      let fastChannel = null;
+      let reliableChannel = null;
+      let isPointerLocked = false;
+      let lastBytesReceived = 0;
+      let lastStatsTimestamp = 0;
+      let lastGamepadSignature = "";
+      let statsInterval = null;
+      let pingInterval = null;
+
+      // Restore saved configuration or pre-fill Metered TURN defaults
+      sigUrlInput.value = localStorage.getItem("webrtc_sig_url") || "";
+      turnUrlInput.value = localStorage.getItem("webrtc_turn_url") || "turn:standard.relay.metered.ca:80,turn:standard.relay.metered.ca:443,turns:standard.relay.metered.ca:443?transport=tcp";
+      turnUserInput.value = localStorage.getItem("webrtc_turn_user") || "1d75a67fd754af20a9e6c3c6";
+      turnPassInput.value = localStorage.getItem("webrtc_turn_pass") || "1MB0IFfLRlu6q0KO";
+
+      videoEl.addEventListener("loadedmetadata", () => {
+        statRes.textContent = `${videoEl.videoWidth}x${videoEl.videoHeight}`;
+      });
+
+      videoEl.addEventListener("resize", () => {
+        statRes.textContent = `${videoEl.videoWidth}x${videoEl.videoHeight}`;
+      });
+
+      function setStatus(state, label) {
+        statusDot.className = "dot " + state;
+        statusText.textContent = label;
+      }
+
+      function sendFast(payload) {
+        if (fastChannel && fastChannel.readyState === "open") {
+          fastChannel.send(JSON.stringify(payload));
+        }
+      }
+
+      function sendReliable(payload) {
+        if (reliableChannel && reliableChannel.readyState === "open") {
+          reliableChannel.send(JSON.stringify(payload));
+        }
+      }
+
+      function buildIceServers() {
+        const servers = [
+          { urls: ["stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"] }
+        ];
+        const turnUrl = turnUrlInput.value.trim();
+        const turnUser = turnUserInput.value.trim();
+        const turnPass = turnPassInput.value.trim();
+
+        if (turnUrl) {
+          const urls = turnUrl.split(",").map(s => s.trim()).filter(Boolean);
+          const entry = { urls };
+          if (turnUser) entry.username = turnUser;
+          if (turnPass) entry.credential = turnPass;
+          servers.push(entry);
+        }
+        return servers;
+      }
+
+      async function startConnection() {
+        const rawUrl = sigUrlInput.value.trim().replace(/\/+\$/, "");
+        if (!rawUrl.startsWith("https://") && !rawUrl.startsWith("http://localhost")) {
+          errorBox.textContent = "Signaling URL must start with https:// (e.g., https://xxxx.trycloudflare.com)";
+          return;
+        }
+
+        localStorage.setItem("webrtc_sig_url", rawUrl);
+        localStorage.setItem("webrtc_turn_url", turnUrlInput.value.trim());
+        localStorage.setItem("webrtc_turn_user", turnUserInput.value.trim());
+        localStorage.setItem("webrtc_turn_pass", turnPassInput.value.trim());
+
+        errorBox.textContent = "";
+        connectBtn.disabled = true;
+        connectBtn.textContent = "Negotiating ICE & Signaling...";
+        setStatus("connecting", "CONNECTING");
+
+        cleanupConnection();
+
+        try {
+          const iceServers = buildIceServers();
+          pc = new RTCPeerConnection({
+            iceServers,
+            bundlePolicy: "max-bundle",
+            iceCandidatePoolSize: 4
+          });
+
+          fastChannel = pc.createDataChannel("inputs_fast", {
+            ordered: false,
+            maxRetransmits: 0
+          });
+
+          reliableChannel = pc.createDataChannel("inputs_reliable", {
+            ordered: true
+          });
+
+          reliableChannel.onmessage = (evt) => {
+            try {
+              const msg = JSON.parse(evt.data);
+              if (msg.t === "pong" && typeof msg.ts === "number") {
+                const rtt = Math.round(performance.now() - msg.ts);
+                statRtt.textContent = String(rtt);
+              }
+            } catch (_) {}
+          };
+
+          pc.addTransceiver("video", { direction: "recvonly" });
+
+          pc.ontrack = (event) => {
+            if (event.track.kind === "video") {
+              if (event.receiver && "playoutDelayHint" in event.receiver) {
+                event.receiver.playoutDelayHint = 0;
+              }
+              if (event.receiver && "jitterBufferTarget" in event.receiver) {
+                event.receiver.jitterBufferTarget = 0;
+              }
+
+              // Always construct a valid MediaStream even when aiortc omits stream IDs
+              const stream = (event.streams && event.streams[0])
+                ? event.streams[0]
+                : new MediaStream([event.track]);
+
+              videoEl.srcObject = stream;
+              videoEl.muted = true;
+              videoEl.play().catch((err) => {
+                console.warn("Video play() deferred until click:", err);
+              });
+            }
+          };
+
+          pc.onconnectionstatechange = () => {
+            const st = pc.connectionState;
+            if (st === "connected") {
+              setStatus("connected", "STREAMING");
+              modalEl.classList.add("hidden");
+              connectBtn.disabled = false;
+              connectBtn.textContent = "Connect to Windows Host";
+              videoEl.play().catch(() => {});
+            } else if (st === "failed" || st === "disconnected" || st === "closed") {
+              setStatus("", st.toUpperCase());
+              connectBtn.disabled = false;
+              connectBtn.textContent = "Reconnect to Windows Host";
+            }
+          };
+
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+
+          await new Promise((resolve) => {
+            if (pc.iceGatheringState === "complete") {
+              resolve();
+              return;
+            }
+            const timeout = setTimeout(resolve, 4000);
+            pc.onicegatheringstatechange = () => {
+              if (pc.iceGatheringState === "complete") {
+                clearTimeout(timeout);
+                resolve();
+              }
+            };
+          });
+
+          const response = await fetch(rawUrl + "/offer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sdp: pc.localDescription.sdp,
+              type: pc.localDescription.type,
+              iceServers
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error("Host returned HTTP " + response.status);
+          }
+
+          const answer = await response.json();
+          await pc.setRemoteDescription(new RTCSessionDescription(answer));
+
+          startTelemetryLoops();
+        } catch (err) {
+          setStatus("", "ERROR");
+          errorBox.textContent = "Connection failed: " + (err.message || String(err));
+          connectBtn.disabled = false;
+          connectBtn.textContent = "Connect to Windows Host";
+        }
+      }
+
+      function cleanupConnection() {
+        if (statsInterval) clearInterval(statsInterval);
+        if (pingInterval) clearInterval(pingInterval);
+        lastBytesReceived = 0;
+        lastStatsTimestamp = 0;
+        statRes.textContent = "0x0";
+        if (pc) {
+          try { pc.close(); } catch (_) {}
+          pc = null;
+        }
+      }
+
+      function startTelemetryLoops() {
+        pingInterval = setInterval(() => {
+          sendReliable({ t: "ping", ts: performance.now() });
+        }, 1000);
+
+        statsInterval = setInterval(async () => {
+          if (!pc) return;
+          const reports = await pc.getStats();
+          reports.forEach((report) => {
+            if (report.type === "inbound-rtp" && report.kind === "video") {
+              if (typeof report.framesPerSecond === "number") {
+                statFps.textContent = String(Math.round(report.framesPerSecond));
+              }
+              if (report.frameWidth && report.frameHeight) {
+                statRes.textContent = `${report.frameWidth}x${report.frameHeight}`;
+              }
+              if (typeof report.bytesReceived === "number" && typeof report.timestamp === "number") {
+                if (lastStatsTimestamp > 0) {
+                  const dt = (report.timestamp - lastStatsTimestamp) / 1000;
+                  const dBytes = report.bytesReceived - lastBytesReceived;
+                  if (dt > 0) {
+                    const mbps = ((dBytes * 8) / dt / 1_000_000).toFixed(1);
+                    statBitrate.textContent = mbps;
+                  }
+                }
+                lastBytesReceived = report.bytesReceived;
+                lastStatsTimestamp = report.timestamp;
+              }
+            }
+          });
+        }, 1000);
+      }
+
+      // Pointer Lock & Relative Mouse Capture
+      async function requestMouseLock() {
+        if (document.pointerLockElement === viewportEl) return;
+        try {
+          await viewportEl.requestPointerLock({ unadjustedMovement: true });
+        } catch (_) {
+          try {
+            viewportEl.requestPointerLock();
+          } catch (__) {}
+        }
+      }
+
+      viewportEl.addEventListener("click", () => {
+        if (modalEl.classList.contains("hidden")) {
+          videoEl.play().catch(() => {});
+          requestMouseLock();
+        }
+      });
+
+      document.addEventListener("pointerlockchange", () => {
+        isPointerLocked = (document.pointerLockElement === viewportEl);
+        statInput.textContent = isPointerLocked ? "Locked (Gaming)" : "Unlocked";
+        if (!isPointerLocked) {
+          sendReliable({ t: "rel" });
+        }
+      });
+
+      document.addEventListener("mousemove", (e) => {
+        if (!isPointerLocked) return;
+        const dx = e.movementX || 0;
+        const dy = e.movementY || 0;
+        if (dx !== 0 || dy !== 0) {
+          sendFast({ t: "mm", dx, dy });
+        }
+      });
+
+      document.addEventListener("mousedown", (e) => {
+        if (!isPointerLocked) return;
+        e.preventDefault();
+        sendReliable({ t: "md", b: e.button });
+      });
+
+      document.addEventListener("mouseup", (e) => {
+        if (!isPointerLocked) return;
+        e.preventDefault();
+        sendReliable({ t: "mu", b: e.button });
+      });
+
+      document.addEventListener("wheel", (e) => {
+        if (!isPointerLocked) return;
+        e.preventDefault();
+        sendFast({ t: "mw", dy: e.deltaY });
+      }, { passive: false });
+
+      document.addEventListener("contextmenu", (e) => e.preventDefault());
+
+      // Raw Keyboard Capture
+      window.addEventListener("keydown", (e) => {
+        if (!isPointerLocked) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (!e.repeat) {
+          sendReliable({ t: "kd", c: e.code });
+        }
+      }, { capture: true });
+
+      window.addEventListener("keyup", (e) => {
+        if (!isPointerLocked) return;
+        e.preventDefault();
+        e.stopPropagation();
+        sendReliable({ t: "ku", c: e.code });
+      }, { capture: true });
+
+      window.addEventListener("blur", () => {
+        sendReliable({ t: "rel" });
+      });
+
+      fullscreenBtn.addEventListener("click", async () => {
+        try {
+          await document.documentElement.requestFullscreen();
+          if (navigator.keyboard && navigator.keyboard.lock) {
+            await navigator.keyboard.lock();
+          }
+          requestMouseLock();
+        } catch (_) {}
+      });
+
+      settingsBtn.addEventListener("click", () => {
+        if (document.pointerLockElement) {
+          document.exitPointerLock();
+        }
+        modalEl.classList.toggle("hidden");
+      });
+
+      connectBtn.addEventListener("click", startConnection);
+
+      // 60Hz W3C Gamepad Polling Loop
+      const DEADZONE = 0.08;
+
+      function applyDeadzone(val) {
+        if (Math.abs(val) < DEADZONE) return 0.0;
+        const sign = Math.sign(val);
+        const norm = (Math.abs(val) - DEADZONE) / (1.0 - DEADZONE);
+        return Number((sign * norm).toFixed(3));
+      }
+
+      window.addEventListener("gamepadconnected", (e) => {
+        statGamepad.textContent = e.gamepad.id.slice(0, 18);
+      });
+
+      window.addEventListener("gamepaddisconnected", () => {
+        statGamepad.textContent = "None";
+      });
+
+      function pollGamepadLoop() {
+        const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+        let activePad = null;
+        for (let i = 0; i < pads.length; i++) {
+          if (pads[i] && pads[i].connected) {
+            activePad = pads[i];
+            break;
+          }
+        }
+
+        if (activePad) {
+          let mask = 0;
+          const btns = activePad.buttons;
+          for (let i = 0; i < Math.min(btns.length, 17); i++) {
+            if (i === 6 || i === 7) continue;
+            if (btns[i].pressed) {
+              mask |= (1 << i);
+            }
+          }
+
+          const lt = btns[6] ? Number(btns[6].value.toFixed(3)) : 0.0;
+          const rt = btns[7] ? Number(btns[7].value.toFixed(3)) : 0.0;
+
+          const rawAxes = activePad.axes || [0, 0, 0, 0];
+          const axes = [
+            applyDeadzone(rawAxes[0] || 0),
+            applyDeadzone(rawAxes[1] || 0),
+            applyDeadzone(rawAxes[2] || 0),
+            applyDeadzone(rawAxes[3] || 0)
+          ];
+
+          const signature = `${mask}|${lt}|${rt}|${axes.join(",")}`;
+          if (signature !== lastGamepadSignature) {
+            lastGamepadSignature = signature;
+            sendFast({ t: "gp", m: mask, lt, rt, a: axes });
+          }
+        }
+
+        requestAnimationFrame(pollGamepadLoop);
+      }
+
+      requestAnimationFrame(pollGamepadLoop);
+    })();
+  </script>
+</body>
+</html>
