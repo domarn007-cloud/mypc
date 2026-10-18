@@ -8,7 +8,7 @@
     :root {
       --bg: #07090e;
       --panel: rgba(18, 23, 35, 0.92);
-      --border: rgba(255, 255, 255, 0.12);
+      --border: rgba(255, 255, 255, 0.14);
       --accent: #3b82f6;
       --accent-hover: #2563eb;
       --success: #10b981;
@@ -33,6 +33,7 @@
       background-color: #000;
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      cursor: none;
     }
 
     #viewport {
@@ -43,6 +44,7 @@
       align-items: center;
       justify-content: center;
       background: #000;
+      cursor: none;
     }
 
     video#remote-video {
@@ -50,20 +52,63 @@
       height: 100%;
       object-fit: contain;
       background: #000;
-      cursor: crosshair;
+      pointer-events: none;
     }
 
-    /* HUD Telemetry Overlay */
+    /* Zero-latency local cursor overlay so the cursor is ALWAYS visible on Chromebook */
+    #local-cursor {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 18px;
+      height: 18px;
+      margin-left: -9px;
+      margin-top: -9px;
+      border: 2px solid rgba(59, 130, 246, 0.95);
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.25);
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.9);
+      pointer-events: none;
+      z-index: 9999;
+      transform: translate3d(-100px, -100px, 0);
+      transition: width 0.08s, height 0.08s, background 0.08s;
+    }
+
+    #local-cursor::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 4px;
+      height: 4px;
+      margin-left: -2px;
+      margin-top: -2px;
+      background: #ffffff;
+      border-radius: 50%;
+    }
+
+    #local-cursor.clicking {
+      width: 12px;
+      height: 12px;
+      margin-left: -6px;
+      margin-top: -6px;
+      background: rgba(16, 185, 129, 0.8);
+    }
+
+    #local-cursor.hidden {
+      display: none;
+    }
+
     #hud {
       position: fixed;
-      top: 12px;
-      left: 12px;
+      top: 10px;
+      left: 10px;
       z-index: 20;
       display: flex;
-      gap: 10px;
+      gap: 9px;
       align-items: center;
-      padding: 6px 12px;
-      background: rgba(10, 14, 23, 0.78);
+      padding: 6px 11px;
+      background: rgba(10, 14, 23, 0.8);
       border: 1px solid var(--border);
       border-radius: 6px;
       font-size: 12px;
@@ -88,36 +133,56 @@
     .dot.connected { background: var(--success); }
     .dot.connecting { background: var(--warn); }
 
-    .divider {
-      color: rgba(255, 255, 255, 0.2);
-    }
+    .divider { color: rgba(255, 255, 255, 0.2); }
 
-    /* Top-right Control Buttons */
     #toolbar {
       position: fixed;
-      top: 12px;
-      right: 12px;
+      top: 10px;
+      right: 10px;
       z-index: 25;
       display: flex;
-      gap: 8px;
+      align-items: center;
+      gap: 6px;
+      cursor: default;
     }
 
     .btn-small {
-      background: rgba(18, 23, 35, 0.85);
+      background: rgba(18, 23, 35, 0.88);
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 6px;
-      padding: 6px 12px;
+      padding: 6px 10px;
       font-size: 12px;
       cursor: pointer;
       transition: background 0.15s;
     }
 
     .btn-small:hover {
-      background: rgba(40, 50, 75, 0.95);
+      background: rgba(45, 58, 88, 0.95);
     }
 
-    /* Connection Modal */
+    .btn-small.active-mode {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .sens-box {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(18, 23, 35, 0.88);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 11px;
+    }
+
+    .sens-box input[type="range"] {
+      width: 60px;
+      cursor: pointer;
+    }
+
     #config-modal {
       position: fixed;
       inset: 0;
@@ -127,11 +192,10 @@
       justify-content: center;
       background: rgba(5, 7, 12, 0.82);
       backdrop-filter: blur(8px);
+      cursor: default;
     }
 
-    #config-modal.hidden {
-      display: none;
-    }
+    #config-modal.hidden { display: none; }
 
     .card {
       width: 100%;
@@ -143,30 +207,10 @@
       box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
     }
 
-    .card h1 {
-      font-size: 18px;
-      margin-bottom: 6px;
-    }
-
-    .card p {
-      font-size: 13px;
-      color: var(--muted);
-      margin-bottom: 18px;
-      line-height: 1.4;
-    }
-
-    .field {
-      margin-bottom: 14px;
-    }
-
-    .field label {
-      display: block;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--muted);
-      margin-bottom: 5px;
-    }
-
+    .card h1 { font-size: 18px; margin-bottom: 6px; }
+    .card p { font-size: 13px; color: var(--muted); margin-bottom: 18px; line-height: 1.4; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
     .field input {
       width: 100%;
       padding: 9px 11px;
@@ -180,19 +224,8 @@
       -webkit-user-select: text;
     }
 
-    .field input:focus {
-      outline: none;
-      border-color: var(--accent);
-    }
-
-    .row {
-      display: flex;
-      gap: 10px;
-    }
-
-    .row .field {
-      flex: 1;
-    }
+    .row { display: flex; gap: 10px; }
+    .row .field { flex: 1; }
 
     .btn-primary {
       width: 100%;
@@ -207,15 +240,6 @@
       margin-top: 6px;
     }
 
-    .btn-primary:hover {
-      background: var(--accent-hover);
-    }
-
-    .btn-primary:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
     #error-box {
       margin-top: 12px;
       font-size: 12px;
@@ -225,6 +249,8 @@
   </style>
 </head>
 <body>
+
+  <div id="local-cursor"></div>
 
   <div id="hud">
     <div class="badge">
@@ -238,16 +264,20 @@
     <span class="divider">|</span>
     <span>RTT: <strong id="stat-rtt">--</strong> ms</span>
     <span class="divider">|</span>
-    <span>Bitrate: <strong id="stat-bitrate">0.0</strong> Mbps</span>
+    <span>Mouse: <strong id="stat-input">Desktop 1:1</strong></span>
     <span class="divider">|</span>
-    <span>Input: <strong id="stat-input">Unlocked</strong></span>
-    <span class="divider">|</span>
-    <span>Gamepad: <strong id="stat-gamepad">None</strong></span>
+    <span>Key: <strong id="stat-key">--</strong></span>
   </div>
 
   <div id="toolbar">
-    <button class="btn-small" id="btn-fullscreen" type="button">Fullscreen &amp; Lock Keys</button>
-    <button class="btn-small" id="btn-settings" type="button">Connection Setup</button>
+    <div class="sens-box" title="3D FPS Mouse Sensitivity">
+      <span>Sens: <strong id="sens-val">1.2</strong>x</span>
+      <input id="sens-slider" type="range" min="0.2" max="4.0" step="0.1" value="1.2" />
+    </div>
+    <button class="btn-small" id="btn-fps-lock" type="button">Lock Mouse: 3D FPS (F8)</button>
+    <button class="btn-small" id="btn-send-esc" type="button">Send Esc</button>
+    <button class="btn-small" id="btn-fullscreen" type="button">Fullscreen</button>
+    <button class="btn-small" id="btn-settings" type="button">Setup</button>
   </div>
 
   <div id="viewport">
@@ -257,7 +287,7 @@
   <div id="config-modal">
     <div class="card">
       <h1>WebRTC Low-Latency Steam Host</h1>
-      <p>Enter your Cloudflare Tunnel HTTPS endpoint and TURN relay credentials.</p>
+      <p>Zero-latency mode enabled! Move your trackpad for instant local + remote cursor tracking, or press <strong>F8</strong> for 3D FPS mouse lock.</p>
 
       <div class="field">
         <label for="sig-url">Host Signaling URL (Cloudflare Tunnel)</label>
@@ -266,17 +296,17 @@
 
       <div class="field">
         <label for="turn-url">TURN Server URLs (Comma-separated)</label>
-        <input id="turn-url" type="text" placeholder="turns:standard.relay.metered.ca:443?transport=tcp" autocomplete="off" />
+        <input id="turn-url" type="text" autocomplete="off" />
       </div>
 
       <div class="row">
         <div class="field">
           <label for="turn-user">TURN Username</label>
-          <input id="turn-user" type="text" placeholder="username" autocomplete="off" />
+          <input id="turn-user" type="text" autocomplete="off" />
         </div>
         <div class="field">
           <label for="turn-pass">TURN Credential</label>
-          <input id="turn-pass" type="password" placeholder="password" autocomplete="off" />
+          <input id="turn-pass" type="password" autocomplete="off" />
         </div>
       </div>
 
@@ -289,6 +319,7 @@
     (() => {
       const videoEl = document.getElementById("remote-video");
       const viewportEl = document.getElementById("viewport");
+      const localCursor = document.getElementById("local-cursor");
       const modalEl = document.getElementById("config-modal");
       const sigUrlInput = document.getElementById("sig-url");
       const turnUrlInput = document.getElementById("turn-url");
@@ -297,6 +328,10 @@
       const connectBtn = document.getElementById("btn-connect");
       const settingsBtn = document.getElementById("btn-settings");
       const fullscreenBtn = document.getElementById("btn-fullscreen");
+      const fpsLockBtn = document.getElementById("btn-fps-lock");
+      const sendEscBtn = document.getElementById("btn-send-esc");
+      const sensSlider = document.getElementById("sens-slider");
+      const sensVal = document.getElementById("sens-val");
       const errorBox = document.getElementById("error-box");
 
       const statusDot = document.getElementById("status-dot");
@@ -304,33 +339,31 @@
       const statRes = document.getElementById("stat-res");
       const statFps = document.getElementById("stat-fps");
       const statRtt = document.getElementById("stat-rtt");
-      const statBitrate = document.getElementById("stat-bitrate");
       const statInput = document.getElementById("stat-input");
-      const statGamepad = document.getElementById("stat-gamepad");
+      const statKey = document.getElementById("stat-key");
 
       let pc = null;
+      let videoReceiver = null;
       let fastChannel = null;
       let reliableChannel = null;
       let isPointerLocked = false;
-      let lastBytesReceived = 0;
-      let lastStatsTimestamp = 0;
-      let lastGamepadSignature = "";
+      let mouseSensitivity = 1.2;
       let statsInterval = null;
       let pingInterval = null;
 
-      // Restore saved configuration or pre-fill Metered TURN defaults
       sigUrlInput.value = localStorage.getItem("webrtc_sig_url") || "";
       turnUrlInput.value = localStorage.getItem("webrtc_turn_url") || "turn:standard.relay.metered.ca:80,turn:standard.relay.metered.ca:443,turns:standard.relay.metered.ca:443?transport=tcp";
       turnUserInput.value = localStorage.getItem("webrtc_turn_user") || "1d75a67fd754af20a9e6c3c6";
       turnPassInput.value = localStorage.getItem("webrtc_turn_pass") || "1MB0IFfLRlu6q0KO";
 
-      videoEl.addEventListener("loadedmetadata", () => {
-        statRes.textContent = `${videoEl.videoWidth}x${videoEl.videoHeight}`;
+      sensSlider.addEventListener("input", () => {
+        mouseSensitivity = parseFloat(sensSlider.value) || 1.0;
+        sensVal.textContent = mouseSensitivity.toFixed(1);
       });
 
-      videoEl.addEventListener("resize", () => {
-        statRes.textContent = `${videoEl.videoWidth}x${videoEl.videoHeight}`;
-      });
+      function isStreamingActive() {
+        return modalEl.classList.contains("hidden");
+      }
 
       function setStatus(state, label) {
         statusDot.className = "dot " + state;
@@ -370,7 +403,7 @@
       async function startConnection() {
         const rawUrl = sigUrlInput.value.trim().replace(/\/+\$/, "");
         if (!rawUrl.startsWith("https://") && !rawUrl.startsWith("http://localhost")) {
-          errorBox.textContent = "Signaling URL must start with https:// (e.g., https://xxxx.trycloudflare.com)";
+          errorBox.textContent = "Signaling URL must start with https://";
           return;
         }
 
@@ -384,7 +417,12 @@
         connectBtn.textContent = "Negotiating ICE & Signaling...";
         setStatus("connecting", "CONNECTING");
 
-        cleanupConnection();
+        if (statsInterval) clearInterval(statsInterval);
+        if (pingInterval) clearInterval(pingInterval);
+        if (pc) {
+          try { pc.close(); } catch (_) {}
+          pc = null;
+        }
 
         try {
           const iceServers = buildIceServers();
@@ -394,21 +432,14 @@
             iceCandidatePoolSize: 4
           });
 
-          fastChannel = pc.createDataChannel("inputs_fast", {
-            ordered: false,
-            maxRetransmits: 0
-          });
-
-          reliableChannel = pc.createDataChannel("inputs_reliable", {
-            ordered: true
-          });
+          fastChannel = pc.createDataChannel("inputs_fast", { ordered: false, maxRetransmits: 0 });
+          reliableChannel = pc.createDataChannel("inputs_reliable", { ordered: true });
 
           reliableChannel.onmessage = (evt) => {
             try {
               const msg = JSON.parse(evt.data);
               if (msg.t === "pong" && typeof msg.ts === "number") {
-                const rtt = Math.round(performance.now() - msg.ts);
-                statRtt.textContent = String(rtt);
+                statRtt.textContent = String(Math.round(performance.now() - msg.ts));
               }
             } catch (_) {}
           };
@@ -417,23 +448,19 @@
 
           pc.ontrack = (event) => {
             if (event.track.kind === "video") {
-              if (event.receiver && "playoutDelayHint" in event.receiver) {
-                event.receiver.playoutDelayHint = 0;
+              videoReceiver = event.receiver;
+              if (videoReceiver && "playoutDelayHint" in videoReceiver) {
+                videoReceiver.playoutDelayHint = 0;
               }
-              if (event.receiver && "jitterBufferTarget" in event.receiver) {
-                event.receiver.jitterBufferTarget = 0;
+              if (videoReceiver && "jitterBufferTarget" in videoReceiver) {
+                videoReceiver.jitterBufferTarget = 0;
               }
-
-              // Always construct a valid MediaStream even when aiortc omits stream IDs
               const stream = (event.streams && event.streams[0])
                 ? event.streams[0]
                 : new MediaStream([event.track]);
-
               videoEl.srcObject = stream;
               videoEl.muted = true;
-              videoEl.play().catch((err) => {
-                console.warn("Video play() deferred until click:", err);
-              });
+              videoEl.play().catch(() => {});
             }
           };
 
@@ -456,10 +483,7 @@
           await pc.setLocalDescription(offer);
 
           await new Promise((resolve) => {
-            if (pc.iceGatheringState === "complete") {
-              resolve();
-              return;
-            }
+            if (pc.iceGatheringState === "complete") return resolve();
             const timeout = setTimeout(resolve, 4000);
             pc.onicegatheringstatechange = () => {
               if (pc.iceGatheringState === "complete") {
@@ -479,14 +503,32 @@
             })
           });
 
-          if (!response.ok) {
-            throw new Error("Host returned HTTP " + response.status);
-          }
-
+          if (!response.ok) throw new Error("Host returned HTTP " + response.status);
           const answer = await response.json();
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
 
-          startTelemetryLoops();
+          pingInterval = setInterval(() => {
+            sendReliable({ t: "ping", ts: performance.now() });
+            // Continuously enforce zero jitter buffer delay
+            if (videoReceiver && "playoutDelayHint" in videoReceiver) {
+              videoReceiver.playoutDelayHint = 0;
+            }
+          }, 1000);
+
+          statsInterval = setInterval(async () => {
+            if (!pc) return;
+            const reports = await pc.getStats();
+            reports.forEach((report) => {
+              if (report.type === "inbound-rtp" && report.kind === "video") {
+                if (typeof report.framesPerSecond === "number") {
+                  statFps.textContent = String(Math.round(report.framesPerSecond));
+                }
+                if (report.frameWidth && report.frameHeight) {
+                  statRes.textContent = `${report.frameWidth}x${report.frameHeight}`;
+                }
+              }
+            });
+          }, 1000);
         } catch (err) {
           setStatus("", "ERROR");
           errorBox.textContent = "Connection failed: " + (err.message || String(err));
@@ -495,119 +537,138 @@
         }
       }
 
-      function cleanupConnection() {
-        if (statsInterval) clearInterval(statsInterval);
-        if (pingInterval) clearInterval(pingInterval);
-        lastBytesReceived = 0;
-        lastStatsTimestamp = 0;
-        statRes.textContent = "0x0";
-        if (pc) {
-          try { pc.close(); } catch (_) {}
-          pc = null;
+      // -----------------------------------------------------------------------
+      // Dual-Mode Mouse Engine + Always-Visible Local Chromebook Cursor
+      // -----------------------------------------------------------------------
+      function getNormalizedVideoCoords(clientX, clientY) {
+        const rect = videoEl.getBoundingClientRect();
+        const vw = videoEl.videoWidth || 1280;
+        const vh = videoEl.videoHeight || 720;
+
+        const videoAspect = vw / vh;
+        const boxAspect = rect.width / rect.height;
+
+        let renderW = rect.width;
+        let renderH = rect.height;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        if (boxAspect > videoAspect) {
+          renderW = rect.height * videoAspect;
+          offsetX = (rect.width - renderW) / 2;
+        } else {
+          renderH = rect.width / videoAspect;
+          offsetY = (rect.height - renderH) / 2;
         }
+
+        const normX = (clientX - rect.left - offsetX) / renderW;
+        const normY = (clientY - rect.top - offsetY) / renderH;
+
+        return {
+          x: Math.max(0, Math.min(1, Number(normX.toFixed(4)))),
+          y: Math.max(0, Math.min(1, Number(normY.toFixed(4))))
+        };
       }
 
-      function startTelemetryLoops() {
-        pingInterval = setInterval(() => {
-          sendReliable({ t: "ping", ts: performance.now() });
-        }, 1000);
-
-        statsInterval = setInterval(async () => {
-          if (!pc) return;
-          const reports = await pc.getStats();
-          reports.forEach((report) => {
-            if (report.type === "inbound-rtp" && report.kind === "video") {
-              if (typeof report.framesPerSecond === "number") {
-                statFps.textContent = String(Math.round(report.framesPerSecond));
-              }
-              if (report.frameWidth && report.frameHeight) {
-                statRes.textContent = `${report.frameWidth}x${report.frameHeight}`;
-              }
-              if (typeof report.bytesReceived === "number" && typeof report.timestamp === "number") {
-                if (lastStatsTimestamp > 0) {
-                  const dt = (report.timestamp - lastStatsTimestamp) / 1000;
-                  const dBytes = report.bytesReceived - lastBytesReceived;
-                  if (dt > 0) {
-                    const mbps = ((dBytes * 8) / dt / 1_000_000).toFixed(1);
-                    statBitrate.textContent = mbps;
-                  }
-                }
-                lastBytesReceived = report.bytesReceived;
-                lastStatsTimestamp = report.timestamp;
-              }
-            }
-          });
-        }, 1000);
-      }
-
-      // Pointer Lock & Relative Mouse Capture
-      async function requestMouseLock() {
-        if (document.pointerLockElement === viewportEl) return;
-        try {
-          await viewportEl.requestPointerLock({ unadjustedMovement: true });
-        } catch (_) {
+      async function togglePointerLock() {
+        if (document.pointerLockElement === viewportEl) {
+          document.exitPointerLock();
+        } else {
           try {
-            viewportEl.requestPointerLock();
-          } catch (__) {}
+            await viewportEl.requestPointerLock({ unadjustedMovement: true });
+          } catch (_) {
+            try { viewportEl.requestPointerLock(); } catch (__) {}
+          }
         }
       }
-
-      viewportEl.addEventListener("click", () => {
-        if (modalEl.classList.contains("hidden")) {
-          videoEl.play().catch(() => {});
-          requestMouseLock();
-        }
-      });
 
       document.addEventListener("pointerlockchange", () => {
         isPointerLocked = (document.pointerLockElement === viewportEl);
-        statInput.textContent = isPointerLocked ? "Locked (Gaming)" : "Unlocked";
-        if (!isPointerLocked) {
+        if (isPointerLocked) {
+          statInput.textContent = "3D FPS Locked";
+          fpsLockBtn.textContent = "Unlock Mouse (Esc)";
+          fpsLockBtn.classList.add("active-mode");
+          localCursor.classList.add("hidden");
+          sendReliable({ t: "cur", v: false });
+        } else {
+          statInput.textContent = "Desktop 1:1";
+          fpsLockBtn.textContent = "Lock Mouse: 3D FPS (F8)";
+          fpsLockBtn.classList.remove("active-mode");
+          localCursor.classList.remove("hidden");
+          sendReliable({ t: "cur", v: true });
           sendReliable({ t: "rel" });
         }
       });
 
-      document.addEventListener("mousemove", (e) => {
-        if (!isPointerLocked) return;
-        const dx = e.movementX || 0;
-        const dy = e.movementY || 0;
-        if (dx !== 0 || dy !== 0) {
-          sendFast({ t: "mm", dx, dy });
+      window.addEventListener("mousemove", (e) => {
+        if (!isPointerLocked) {
+          localCursor.style.transform = `translate3d(${e.clientX}px, ${e.clientY}px, 0)`;
+        }
+
+        if (!isStreamingActive()) return;
+
+        if (isPointerLocked) {
+          const dx = Math.round((e.movementX || 0) * mouseSensitivity);
+          const dy = Math.round((e.movementY || 0) * mouseSensitivity);
+          if (dx !== 0 || dy !== 0) {
+            sendFast({ t: "mm", dx, dy });
+          }
+        } else {
+          const pos = getNormalizedVideoCoords(e.clientX, e.clientY);
+          sendFast({ t: "ma", x: pos.x, y: pos.y });
         }
       });
 
-      document.addEventListener("mousedown", (e) => {
-        if (!isPointerLocked) return;
+      viewportEl.addEventListener("mousedown", (e) => {
+        localCursor.classList.add("clicking");
+        if (!isStreamingActive()) return;
         e.preventDefault();
+        if (!isPointerLocked) {
+          const pos = getNormalizedVideoCoords(e.clientX, e.clientY);
+          sendFast({ t: "ma", x: pos.x, y: pos.y });
+        }
         sendReliable({ t: "md", b: e.button });
       });
 
-      document.addEventListener("mouseup", (e) => {
-        if (!isPointerLocked) return;
-        e.preventDefault();
+      window.addEventListener("mouseup", (e) => {
+        localCursor.classList.remove("clicking");
+        if (!isStreamingActive()) return;
         sendReliable({ t: "mu", b: e.button });
       });
 
-      document.addEventListener("wheel", (e) => {
-        if (!isPointerLocked) return;
+      viewportEl.addEventListener("wheel", (e) => {
+        if (!isStreamingActive()) return;
         e.preventDefault();
         sendFast({ t: "mw", dy: e.deltaY });
       }, { passive: false });
 
-      document.addEventListener("contextmenu", (e) => e.preventDefault());
+      document.addEventListener("contextmenu", (e) => {
+        if (isStreamingActive()) e.preventDefault();
+      });
 
-      // Raw Keyboard Capture
+      // Always-Active Native Keyboard Capture
       window.addEventListener("keydown", (e) => {
-        if (!isPointerLocked) return;
+        if (!isStreamingActive()) return;
+
+        if (e.code === "F8") {
+          e.preventDefault();
+          togglePointerLock();
+          return;
+        }
+
         e.preventDefault();
         e.stopPropagation();
+
+        statKey.textContent = e.code;
         if (!e.repeat) {
           sendReliable({ t: "kd", c: e.code });
         }
       }, { capture: true });
 
       window.addEventListener("keyup", (e) => {
-        if (!isPointerLocked) return;
+        if (!isStreamingActive()) return;
+        if (e.code === "F8") return;
+
         e.preventDefault();
         e.stopPropagation();
         sendReliable({ t: "ku", c: e.code });
@@ -617,85 +678,32 @@
         sendReliable({ t: "rel" });
       });
 
+      fpsLockBtn.addEventListener("click", togglePointerLock);
+
+      sendEscBtn.addEventListener("click", () => {
+        sendReliable({ t: "kd", c: "Escape" });
+        setTimeout(() => sendReliable({ t: "ku", c: "Escape" }), 60);
+      });
+
       fullscreenBtn.addEventListener("click", async () => {
         try {
-          await document.documentElement.requestFullscreen();
-          if (navigator.keyboard && navigator.keyboard.lock) {
-            await navigator.keyboard.lock();
+          if (!document.fullscreenElement) {
+            await document.documentElement.requestFullscreen();
+            if (navigator.keyboard && navigator.keyboard.lock) {
+              await navigator.keyboard.lock();
+            }
+          } else {
+            await document.exitFullscreen();
           }
-          requestMouseLock();
         } catch (_) {}
       });
 
       settingsBtn.addEventListener("click", () => {
-        if (document.pointerLockElement) {
-          document.exitPointerLock();
-        }
+        if (document.pointerLockElement) document.exitPointerLock();
         modalEl.classList.toggle("hidden");
       });
 
       connectBtn.addEventListener("click", startConnection);
-
-      // 60Hz W3C Gamepad Polling Loop
-      const DEADZONE = 0.08;
-
-      function applyDeadzone(val) {
-        if (Math.abs(val) < DEADZONE) return 0.0;
-        const sign = Math.sign(val);
-        const norm = (Math.abs(val) - DEADZONE) / (1.0 - DEADZONE);
-        return Number((sign * norm).toFixed(3));
-      }
-
-      window.addEventListener("gamepadconnected", (e) => {
-        statGamepad.textContent = e.gamepad.id.slice(0, 18);
-      });
-
-      window.addEventListener("gamepaddisconnected", () => {
-        statGamepad.textContent = "None";
-      });
-
-      function pollGamepadLoop() {
-        const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-        let activePad = null;
-        for (let i = 0; i < pads.length; i++) {
-          if (pads[i] && pads[i].connected) {
-            activePad = pads[i];
-            break;
-          }
-        }
-
-        if (activePad) {
-          let mask = 0;
-          const btns = activePad.buttons;
-          for (let i = 0; i < Math.min(btns.length, 17); i++) {
-            if (i === 6 || i === 7) continue;
-            if (btns[i].pressed) {
-              mask |= (1 << i);
-            }
-          }
-
-          const lt = btns[6] ? Number(btns[6].value.toFixed(3)) : 0.0;
-          const rt = btns[7] ? Number(btns[7].value.toFixed(3)) : 0.0;
-
-          const rawAxes = activePad.axes || [0, 0, 0, 0];
-          const axes = [
-            applyDeadzone(rawAxes[0] || 0),
-            applyDeadzone(rawAxes[1] || 0),
-            applyDeadzone(rawAxes[2] || 0),
-            applyDeadzone(rawAxes[3] || 0)
-          ];
-
-          const signature = `${mask}|${lt}|${rt}|${axes.join(",")}`;
-          if (signature !== lastGamepadSignature) {
-            lastGamepadSignature = signature;
-            sendFast({ t: "gp", m: mask, lt, rt, a: axes });
-          }
-        }
-
-        requestAnimationFrame(pollGamepadLoop);
-      }
-
-      requestAnimationFrame(pollGamepadLoop);
     })();
   </script>
 </body>
