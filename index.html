@@ -55,7 +55,7 @@
       pointer-events: none;
     }
 
-    /* Zero-latency local cursor overlay so the cursor is ALWAYS visible on Chromebook */
+    /* Zero-latency local cursor overlay */
     #local-cursor {
       position: fixed;
       top: 0;
@@ -114,6 +114,12 @@
       font-size: 12px;
       backdrop-filter: blur(6px);
       pointer-events: none;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    #hud.ui-hidden {
+      transform: translateY(-150%);
+      opacity: 0;
     }
 
     .badge {
@@ -144,6 +150,41 @@
       align-items: center;
       gap: 6px;
       cursor: default;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    #toolbar.ui-hidden {
+      transform: translateY(-150%);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Tiny unobtrusive corner tab to restore UI when hidden */
+    #btn-restore-ui {
+      position: fixed;
+      top: 0;
+      right: 12px;
+      z-index: 26;
+      background: rgba(18, 23, 35, 0.75);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 6px 6px;
+      padding: 3px 8px;
+      font-size: 10px;
+      cursor: pointer;
+      opacity: 0.18;
+      transition: opacity 0.15s ease;
+      display: none;
+    }
+
+    #btn-restore-ui:hover {
+      opacity: 1;
+      background: var(--accent);
+    }
+
+    #btn-restore-ui.visible {
+      display: block;
     }
 
     .btn-small {
@@ -252,6 +293,9 @@
 
   <div id="local-cursor"></div>
 
+  <!-- Tiny translucent restore tab shown only when UI is hidden -->
+  <button id="btn-restore-ui" type="button" title="Restore Overlay (Ctrl+Shift+H or F9)">Show UI</button>
+
   <div id="hud">
     <div class="badge">
       <span id="status-dot" class="dot"></span>
@@ -278,6 +322,7 @@
     <button class="btn-small" id="btn-send-esc" type="button">Send Esc</button>
     <button class="btn-small" id="btn-fullscreen" type="button">Fullscreen</button>
     <button class="btn-small" id="btn-settings" type="button">Setup</button>
+    <button class="btn-small" id="btn-hide-ui" type="button" title="Shortcut: Ctrl+Shift+H or F9">Hide UI</button>
   </div>
 
   <div id="viewport">
@@ -287,7 +332,7 @@
   <div id="config-modal">
     <div class="card">
       <h1>WebRTC Low-Latency Steam Host</h1>
-      <p>Zero-latency mode enabled! Move your trackpad for instant local + remote cursor tracking, or press <strong>F8</strong> for 3D FPS mouse lock.</p>
+      <p>Press <strong>Ctrl + Shift + H</strong> (or <strong>F9</strong>) anytime to hide/show the top overlay bars, or <strong>F8</strong> for 3D FPS mouse lock.</p>
 
       <div class="field">
         <label for="sig-url">Host Signaling URL (Cloudflare Tunnel)</label>
@@ -320,6 +365,10 @@
       const videoEl = document.getElementById("remote-video");
       const viewportEl = document.getElementById("viewport");
       const localCursor = document.getElementById("local-cursor");
+      const hudEl = document.getElementById("hud");
+      const toolbarEl = document.getElementById("toolbar");
+      const restoreUiBtn = document.getElementById("btn-restore-ui");
+      const hideUiBtn = document.getElementById("btn-hide-ui");
       const modalEl = document.getElementById("config-modal");
       const sigUrlInput = document.getElementById("sig-url");
       const turnUrlInput = document.getElementById("turn-url");
@@ -347,6 +396,7 @@
       let fastChannel = null;
       let reliableChannel = null;
       let isPointerLocked = false;
+      let isUiHidden = false;
       let mouseSensitivity = 1.2;
       let statsInterval = null;
       let pingInterval = null;
@@ -355,6 +405,16 @@
       turnUrlInput.value = localStorage.getItem("webrtc_turn_url") || "turn:standard.relay.metered.ca:80,turn:standard.relay.metered.ca:443,turns:standard.relay.metered.ca:443?transport=tcp";
       turnUserInput.value = localStorage.getItem("webrtc_turn_user") || "1d75a67fd754af20a9e6c3c6";
       turnPassInput.value = localStorage.getItem("webrtc_turn_pass") || "1MB0IFfLRlu6q0KO";
+
+      function toggleUiVisibility() {
+        isUiHidden = !isUiHidden;
+        hudEl.classList.toggle("ui-hidden", isUiHidden);
+        toolbarEl.classList.toggle("ui-hidden", isUiHidden);
+        restoreUiBtn.classList.toggle("visible", isUiHidden);
+      }
+
+      hideUiBtn.addEventListener("click", toggleUiVisibility);
+      restoreUiBtn.addEventListener("click", toggleUiVisibility);
 
       sensSlider.addEventListener("input", () => {
         mouseSensitivity = parseFloat(sensSlider.value) || 1.0;
@@ -509,7 +569,6 @@
 
           pingInterval = setInterval(() => {
             sendReliable({ t: "ping", ts: performance.now() });
-            // Continuously enforce zero jitter buffer delay
             if (videoReceiver && "playoutDelayHint" in videoReceiver) {
               videoReceiver.playoutDelayHint = 0;
             }
@@ -537,9 +596,6 @@
         }
       }
 
-      // -----------------------------------------------------------------------
-      // Dual-Mode Mouse Engine + Always-Visible Local Chromebook Cursor
-      // -----------------------------------------------------------------------
       function getNormalizedVideoCoords(clientX, clientY) {
         const rect = videoEl.getBoundingClientRect();
         const vw = videoEl.videoWidth || 1280;
@@ -646,12 +702,21 @@
         if (isStreamingActive()) e.preventDefault();
       });
 
-      // Always-Active Native Keyboard Capture
       window.addEventListener("keydown", (e) => {
         if (!isStreamingActive()) return;
 
+        // Toggle UI Overlay visibility with Ctrl + Shift + H or F9
+        if (e.code === "F9" || (e.ctrlKey && e.shiftKey && e.code === "KeyH")) {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleUiVisibility();
+          return;
+        }
+
+        // Toggle 3D FPS Pointer Lock with F8
         if (e.code === "F8") {
           e.preventDefault();
+          e.stopPropagation();
           togglePointerLock();
           return;
         }
@@ -667,7 +732,9 @@
 
       window.addEventListener("keyup", (e) => {
         if (!isStreamingActive()) return;
-        if (e.code === "F8") return;
+        if (e.code === "F8" || e.code === "F9" || (e.ctrlKey && e.shiftKey && e.code === "KeyH")) {
+          return;
+        }
 
         e.preventDefault();
         e.stopPropagation();
@@ -700,6 +767,7 @@
 
       settingsBtn.addEventListener("click", () => {
         if (document.pointerLockElement) document.exitPointerLock();
+        if (isUiHidden) toggleUiVisibility();
         modalEl.classList.toggle("hidden");
       });
 
